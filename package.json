@@ -3,6 +3,16 @@
   "displayName": "esp-debug",
   "description": "",
   "version": "0.0.1",
+  "publisher": "ElectricThanhTung",
+  "author": {
+    "name": "ElectricThanhTung",
+    "email": "electricthanhtung@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ElectricThanhTung/ESP-Debug.git"
+  },
+  "license": "MIT",
   "engines": {
     "vscode": "^1.100.0"
   },
