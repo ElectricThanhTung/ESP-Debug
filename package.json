@@ -17,15 +17,68 @@
     "vscode": "^1.100.0"
   },
   "categories": [
-    "Other"
+    "Debuggers"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onDebugResolve:esp-debug",
+    "onDebugDynamicConfigurations:esp-debug"
+  ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
+    "breakpoints": [
+      {"language": "c"},
+      {"language": "cpp"}
+    ],
+    "debuggers": [
       {
-        "command": "esp-debug.helloWorld",
-        "title": "Hello World"
+          "type": "esp-debug",
+          "languages": ["c", "cpp"],
+          "label": "ESP Debug",
+          "program": "./out/extension.js",
+          "runtime": "node",
+          "configurationAttributes": {
+            "launch": {
+              "required": ["program", "port"],
+              "properties": {
+                "cwd": {
+                  "type": "string",
+                  "description": "The current working directory of the executed program",
+                  "default": "${workspace}"
+                },
+                "program": {
+                  "type": "string",
+                  "description": "Path to program file (elf file)",
+                  "default": "${workspace}"
+                },
+                "port": {
+                  "type": "string",
+                  "description": "COM Port to connect to device",
+                  "default": "COMx"
+                }
+              }
+            }
+          },
+          "initialConfigurations": [
+            {
+              "type": "esp-debug",
+              "request": "launch",
+              "name": "ESP Program",
+              "program": "build/main.elf",
+              "port": "COMx"
+            }
+          ],
+          "configurationSnippets": [
+            {
+              "description": "A new configuration for ESP Debug",
+              "body": {
+                "type": "esp-debug",
+                "request": "launch",
+                "name": "ESP Program",
+                "program": "build/main.elf",
+                "port": "COMx"
+              }
+            }
+          ]
       }
     ]
   },
