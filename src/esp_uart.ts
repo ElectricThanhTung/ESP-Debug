@@ -41,36 +41,32 @@ export class EspUart {
     }
 
     public static async targetReset(port: string): Promise<boolean> {
-        return new Promise<boolean>(async (resolve) => {
-            const serialPort = await EspUart.open(port);
-            if(!serialPort)
-                return resolve(false);
-            if(!await EspUart.targetEnable(serialPort, false)) {
-                await EspUart.close(serialPort);
-                return resolve(false);
-            }
-            await EspUart.delay(20);
-            if(!await EspUart.targetEnable(serialPort, true)) {
-                await EspUart.close(serialPort);
-                return resolve(false);
-            }
+        const serialPort = await EspUart.open(port);
+        if(!serialPort)
+            return false;
+        if(!await EspUart.targetEnable(serialPort, false)) {
             await EspUart.close(serialPort);
-            await EspUart.delay(500);
-            resolve(true);
-        });
+            return false;
+        }
+        await EspUart.delay(20);
+        if(!await EspUart.targetEnable(serialPort, true)) {
+            await EspUart.close(serialPort);
+            return false;
+        }
+        await EspUart.close(serialPort);
+        await EspUart.delay(500);
+        return true;
     }
 
     public static async interruptRequest(port: string): Promise<boolean> {
-        return new Promise<boolean>(async (resolve) => {
-            const serialPort = await EspUart.open(port);
-            if(!serialPort)
-                return resolve(false);
-            if(!await EspUart.write(serialPort, Buffer.from([0x03]))) {
-                await EspUart.close(serialPort);
-                return resolve(false);
-            }
+        const serialPort = await EspUart.open(port);
+        if(!serialPort)
+            return false;
+        if(!await EspUart.write(serialPort, Buffer.from([0x03]))) {
             await EspUart.close(serialPort);
-            resolve(true);
-        });
+            return false;
+        }
+        await EspUart.close(serialPort);
+        return true;
     }
 }
