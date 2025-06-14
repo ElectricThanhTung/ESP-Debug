@@ -83,18 +83,18 @@ export class EspDebugSession extends LoggingDebugSession {
 
     protected async launchRequest(response: DebugProtocol.LaunchResponse, args: LaunchRequestArguments, request?: DebugProtocol.Request) {
         if(!await EspUart.targetReset(args.port))
-            return this.sendErrorResponse(response, 1, "Unable to reset target device, please check connection again");
+            return this.sendErrorResponse(response, 1, 'Unable to reset target device, please check connection again');
         if(!await EspUart.interruptRequest(args.port))
-            return this.sendErrorResponse(response, 1, "Sending interrupt request to " + args.port + " failed");
+            return this.sendErrorResponse(response, 1, `Sending interrupt request to ${args.port} failed`);
 
         const gdbCmd = path.join(__dirname, '..', 'gdb', 'win', 'xtensa-esp-elf-gdb', 'bin', 'xtensa-esp32-elf-gdb');
         const gdbArgs = [
-            "-ex", "set mi-async on",
+            '-ex', 'set mi-async on',
             args.program,
-            "--quiet",
-            "--interpreter=mi2",
-            "-ex", "set serial baud 115200",
-            "-ex", "target remote \\\\.\\" + args.port
+            '--quiet',
+            '--interpreter=mi2',
+            '-ex', 'set serial baud 115200',
+            '-ex', `target remote \\\\.\\${args.port}`
         ];
 
         if(!this.gdb.launch(gdbCmd, gdbArgs)) {

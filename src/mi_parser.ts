@@ -1,7 +1,7 @@
 
 export class MIParser {
     private static getEndIndexOfString(str: string, index: number): number {
-        if(str[index] == '"')
+        if(str[index] === '"')
             index++;
         while(index < str.length) {
             if(str[index] === '\\')
@@ -106,9 +106,12 @@ export class MIParser {
             return MIParser.parseObject(str);
     }
 
-    public static parser(str: string): Record<string, any> {
-        const endOfTypeIndex = str.indexOf(',');
-        const type = str.substring(1, endOfTypeIndex);
-        return MIParser.parseValues(str.substring(endOfTypeIndex + 1));
+    public static parser(str: string): [string, Record<string, any>] {
+        let endOfTypeIndex = str.indexOf(',');
+        if(endOfTypeIndex < 0)
+            endOfTypeIndex = str.length;
+        const status = str.substring(1, endOfTypeIndex);
+        const data = (endOfTypeIndex >= str.length) ? {} : MIParser.parseValues(str.substring(endOfTypeIndex + 1));
+        return [status, data];
     }
 }

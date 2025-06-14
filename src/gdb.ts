@@ -40,7 +40,7 @@ export class GDB extends EventEmitter {
     }
 
     private stdout(data: any) {
-        this.stdoutbuff += (typeof data == 'string') ? data : data.toString('utf8');
+        this.stdoutbuff += (typeof data === 'string') ? data : data.toString('utf8');
         let line: string | undefined;
         while(line = GDB.getLine(this.stdoutbuff)) {
             this.onStdout(line);
@@ -49,7 +49,7 @@ export class GDB extends EventEmitter {
     }
 
     private stderr(data: any) {
-        this.stderrbuff += (typeof data == 'string') ? data : data.toString('utf8');
+        this.stderrbuff += (typeof data === 'string') ? data : data.toString('utf8');
         let line: string | undefined;
         while(line = GDB.getLine(this.stderrbuff)) {
             this.onStderr(line);
@@ -57,30 +57,33 @@ export class GDB extends EventEmitter {
         }
     }
 
-    private parserStackFrame(str: string): GDBStackFrame {
-        const values = MIParser.parser(str);
-        const addr = parseInt(values.frame.addr, 16);
-        const func = values.frame.func;
-        const file = values.frame.file;
-        const line = parseInt(values.frame.line);
+    private getStackFrame(data: Record<string, any>): GDBStackFrame {
+        const addr = parseInt(data.frame.addr, 16);
+        const func = data.frame.func;
+        const file = data.frame.file;
+        const line = parseInt(data.frame.line);
         return new GDBStackFrame(addr, line, func, file);
     }
 
     private checkStatus(str: string): boolean {
-        if(str[0] === '*') {
-            const status = str.substring(1, str.indexOf(','));
+        if(/[\^*]/.test(str[0])) {
+            const [status, data] = MIParser.parser(str);
             switch(status) {
                 case 'stopped':
                     this.stackFrame = [];
-                    this.stackFrame.push(this.parserStackFrame(str));
+                    this.stackFrame.push(this.getStackFrame(data));
                     this.emit('stopped', 'generic');
+                    break;
+                case 'done':
+                    break;
+                case 'running':
                     break;
                 default:
                     break;
             }
             return true;
         }
-        else if(str[0] == '@')
+        else if(str[0] === '@')
             this.emit('stdout', MIParser.parseValues(str.substring(1)));
         return false;
     }
