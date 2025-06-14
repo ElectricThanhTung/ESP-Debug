@@ -3,16 +3,22 @@ import {
     StackFrame, Source,
     Variable, Breakpoint
 } from '@vscode/debugadapter';
+import * as path from "path";
 import * as vscode from 'vscode';
 import * as ChildProcess from 'child_process';
 import { EventEmitter } from 'events';
 import { GDBStackFrame } from './gdb_stack_frame'
 import { MIParser } from './mi_parser';
+import { Semaphore } from './semaphore';
 
 export class GDB extends EventEmitter {
     private gdbProcess?: ChildProcess.ChildProcess;
-    private stdoutbuff = "";
-    private stderrbuff = "";
+    private stdoutbuff = '';
+    private stderrbuff = '';
+    private status: 'startup' | 'stopped' | 'running' = 'startup';
+    private breakPoints: any[] = [];
+    private gdbSemaphore = new Semaphore(1);
+    private responseCallback?: (data: any) => void;
 
     private stackFrame: GDBStackFrame[] = [];
 
@@ -66,22 +72,28 @@ export class GDB extends EventEmitter {
     }
 
     private checkStatus(str: string): boolean {
-        if(/[\^*]/.test(str[0])) {
-            const [status, data] = MIParser.parser(str);
-            switch(status) {
+        if(str[0] === '*') {
+            const data = MIParser.parser(str);
+            switch(data['gdb status']) {
                 case 'stopped':
+                    this.status = 'stopped';
                     this.stackFrame = [];
                     this.stackFrame.push(this.getStackFrame(data));
                     this.emit('stopped', 'generic');
-                    break;
-                case 'done':
-                    break;
-                case 'running':
                     break;
                 default:
                     break;
             }
             return true;
+        }
+        else if(str[0] === '^') {
+            const data = MIParser.parser(str);
+            if(data['gdb status'] === 'running')
+                this.status = 'running';
+            if(this.responseCallback) {
+                this.responseCallback(data);
+                this.responseCallback = undefined;
+            }
         }
         else if(str[0] === '@')
             this.emit('stdout', MIParser.parseValues(str.substring(1)));
@@ -105,40 +117,145 @@ export class GDB extends EventEmitter {
 
     }
 
-    private writeCmd(cmd: string): boolean {
-        this.emit('gdbout', cmd);
-        this.gdbProcess?.stdin?.write(cmd + '\n');
-        return true;
+    private onResponseReceived(callback: (data: any) => void) {
+        this.responseCallback = callback;
     }
 
-    public continueRequest(): boolean {
-        this.writeCmd('-exec-continue');
-        return true;
+    private removeResponseCallback() {
+        this.responseCallback = undefined;
     }
 
-    public stepInRequest(): boolean {
-        this.writeCmd('-exec-step');
-        return true;
+    private writeCmd(cmd: string, timeout = 500): Promise<any> {
+        return new Promise<any>((resolve) => {
+            this.gdbSemaphore.acquire().then(() => {
+                this.emit('gdbout', cmd);
+
+                this.gdbProcess?.stdin?.write(cmd + '\n');
+
+                const timeoutTask = setTimeout(() => {
+                    this.removeResponseCallback();
+                    this.gdbSemaphore.release();
+                    resolve(undefined);
+                }, timeout);
+
+                this.onResponseReceived((data) => {
+                    this.gdbSemaphore.release();
+                    clearTimeout(timeoutTask);
+                    resolve(data);
+                });
+            });
+        });
     }
 
-    public stepOverRequest(): boolean {
-        this.writeCmd('-exec-next');
-        return true;
+    public async continueRequest(): Promise<boolean> {
+        const resp = await this.writeCmd('-exec-continue');
+        if(!resp)
+            return false;
+        const status = resp['gdb status'];
+        if(status === 'done' || status === 'running')
+            return true;
+        return false;
     }
 
-    public stepOutRequest(): boolean {
-        this.writeCmd('-exec-finish');
-        return true;
+    public async stepInRequest(): Promise<boolean> {
+        const resp = await this.writeCmd('-exec-step');
+        if(!resp)
+            return false;
+        const status = resp['gdb status'];
+        if(status === 'done' || status === 'running')
+            return true;
+        return false;
+    }
+
+    public async stepOverRequest(): Promise<boolean> {
+        const resp = await this.writeCmd('-exec-next');
+        if(!resp)
+            return false;
+        const status = resp['gdb status'];
+        if(status === 'done' || status === 'running')
+            return true;
+        return false;
+    }
+
+    public async stepOutRequest(): Promise<boolean> {
+        const resp = await this.writeCmd('-exec-finish');
+        if(!resp)
+            return false;
+        const status = resp['gdb status'];
+        if(status === 'done' || status === 'running')
+            return true;
+        return false;
     }
 
     public async interruptRequest(): Promise<boolean> {
-        this.writeCmd('-exec-interrupt');
-        return true;
+        const resp = await this.writeCmd('-exec-interrupt');
+        if(!resp)
+            return false;
+        const status = resp['gdb status'];
+        if(status === 'done' || status === 'running')
+            return true;
+        return false;
     }
 
     public async terminateRequest() {
         await this.writeCmd('-target-disconnect');
         this.writeCmd('-gdb-exit');
+    }
+
+    private getRemovedBreakpoints(lines: number[], source: string): any[] {
+        const ret: any[] = [];
+        this.breakPoints.forEach(bkp => {
+            if(!lines.find((line) => ((line === bkp.line) && (bkp.file === source))))
+                ret.push(bkp);
+        });
+        return ret;
+    }
+
+    private async deleteBreakPointRequest(bkp: any): Promise<boolean> {
+        const resp = await this.writeCmd(`-break-delete ${bkp.number}`);
+        if(!resp)
+            return false;
+        const status = resp['gdb status'];
+        if(status === 'done' || status === 'running') {
+            const index = this.breakPoints.findIndex((element) => element === bkp);
+            this.breakPoints.splice(index, 1);
+            return true;
+        }
+        return false;
+    }
+
+    private async addBreakPointRequest(lines: number, source: string): Promise<any> {
+        return this.writeCmd(`-break-insert ${source}:${lines}`);
+    }
+
+    public async setBreakPointsRequest(lines: number[], source: string): Promise<Breakpoint[]> {
+        const ret: Breakpoint[] = [];
+        source = source.replace(/\\/g, '/');
+        const bkpSource = new Source(path.basename(source), source);
+        const removedBreakpoints = this.getRemovedBreakpoints(lines, source);
+        removedBreakpoints.forEach(bkp => this.deleteBreakPointRequest(bkp));
+        for(let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if(this.breakPoints.find(bkp => (line === bkp.line) && (bkp.file === source)))
+                ret.push(new Breakpoint(true, line, 1, bkpSource));
+            else {
+                const resp = await this.addBreakPointRequest(line, source);
+                if(resp && resp['gdb status'] === 'done') {
+                    const bkp = {
+                        number: parseInt(resp.bkpt.number),
+                        addr: parseInt(resp.bkpt.addr, 16),
+                        func: resp.bkpt.func,
+                        line: parseInt(resp.bkpt.line),
+                        file: source
+                    };
+                    this.breakPoints.push(bkp);
+                    ret.push(new Breakpoint(true, bkp.line, 1, bkpSource));
+                }
+                else
+                    ret.push(new Breakpoint(false, line, 1, bkpSource));
+            }
+        }
+        return ret;
     }
 
     private static convertToStackFrame(stackFrames: GDBStackFrame[]): StackFrame[] {
