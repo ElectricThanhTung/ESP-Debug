@@ -91,6 +91,7 @@ export class EspDebugSession extends LoggingDebugSession {
         const gdbArgs = [
             "-ex", "set mi-async on",
             args.program,
+            "--quiet",
             "--interpreter=mi2",
             "-ex", "set serial baud 115200",
             "-ex", "target remote \\\\.\\" + args.port
