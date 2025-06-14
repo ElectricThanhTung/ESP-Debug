@@ -10,8 +10,9 @@ import {
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import path = require('path');
-import { ChildProcess, spawn } from 'child_process';
+import { SerialPort } from 'serialport';
 import { DebugProtocol } from '@vscode/debugprotocol';
+import { GDB } from './gdb';
 
 interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
     cwd?: string;
@@ -20,6 +21,8 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 }
 
 export class EspDebugSession extends LoggingDebugSession {
+    private gdb: GDB = new GDB();
+
     public constructor() {
         super('esp-debug.txt');
     }
@@ -56,10 +59,71 @@ export class EspDebugSession extends LoggingDebugSession {
 
         // response.body.exceptionBreakpointFilters = [{filter: 'all', label: 'Caught Exceptions', default: false}];
 
+        this.gdb.on("stopped", (reason) => {
+            this.sendEvent(new StoppedEvent('stop', 1));
+        });
+
+        this.gdb.on("stdout", (data) => {
+            this.sendEvent(new OutputEvent(data, 'console'));
+        });
+    
+        this.gdb.on("gdbout", (data) => {
+            console.log(data);
+        });
+
+        this.gdb.on("gdberr", (data) => {
+            console.log(data);
+        });
+
         this.sendResponse(response);
     }
 
+    private static async uartInterruptRequest(port: string): Promise<boolean> {
+        return new Promise<boolean>((resolve) => {
+            const serialPort = new SerialPort({
+                path: port,
+                baudRate: 115200,
+                autoOpen: true,
+            });
+
+            serialPort.on('open', () => {
+                serialPort.write(Buffer.from([0x03]), (err) => {
+                    serialPort.close();
+                    resolve(err ? false : true);
+                });
+            });
+
+            serialPort.on('error', (err) => {
+                serialPort.close();
+                resolve(false);
+            });
+        });
+    }
+
+    private async delay(ms: number): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
     protected async launchRequest(response: DebugProtocol.LaunchResponse, args: LaunchRequestArguments, request?: DebugProtocol.Request) {
+        if(!await EspDebugSession.uartInterruptRequest(args.port)) {
+            this.sendErrorResponse(response, 1, "Sending interrupt request to " + args.port + " failed");
+            return;
+        }
+        await this.delay(500);
+
+        const gdbCmd = path.join(__dirname, '..', 'gdb', 'win', 'xtensa-esp-elf-gdb', 'bin', 'xtensa-esp32-elf-gdb');
+        const gdbArgs = [
+            "-ex", "set mi-async on",
+            args.program,
+            "--interpreter=mi2",
+            "-ex", "set serial baud 115200",
+            "-ex", "target remote \\\\.\\" + args.port
+        ];
+
+        if(!this.gdb.launch(gdbCmd, gdbArgs)) {
+            this.sendErrorResponse(response, 1, "GDB launch fail");
+            return;
+        }
         this.sendResponse(response);
         this.sendEvent(new InitializedEvent());
     }
@@ -69,6 +133,7 @@ export class EspDebugSession extends LoggingDebugSession {
     }
 
     protected async terminateRequest(response: DebugProtocol.TerminateResponse, args: DebugProtocol.TerminateArguments, request?: DebugProtocol.Request) {
+        this.gdb.terminateRequest();
         this.sendResponse(response);
         this.sendEvent(new TerminatedEvent());
     }
@@ -94,22 +159,27 @@ export class EspDebugSession extends LoggingDebugSession {
     }
 
     protected async pauseRequest(response: DebugProtocol.PauseResponse, args: DebugProtocol.PauseArguments, request?: DebugProtocol.Request | undefined) {
+        this.gdb.interruptRequest();
         this.sendResponse(response);
     }
 
     protected async continueRequest(response: DebugProtocol.ContinueResponse, args: DebugProtocol.ContinueArguments) {
+        this.gdb.continueRequest();
         this.sendResponse(response);
     }
 
     protected async nextRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments) {
+        this.gdb.stepOverRequest();
         this.sendResponse(response);
     }
 
     protected async stepInRequest(response: DebugProtocol.StepInResponse, args: DebugProtocol.StepInArguments, request?: DebugProtocol.Request | undefined) {
+        this.gdb.stepInRequest();
         this.sendResponse(response);
     }
 
     protected async stepOutRequest(response: DebugProtocol.StepOutResponse, args: DebugProtocol.StepOutArguments, request?: DebugProtocol.Request | undefined) {
+        this.gdb.stepOutRequest();
         this.sendResponse(response);
     }
 
@@ -137,6 +207,11 @@ export class EspDebugSession extends LoggingDebugSession {
     }
 
     protected async stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments) {
+        const frames = await this.gdb.stackFrameRequest();
+        response.body = {
+            stackFrames: frames,
+            totalFrames: frames.length,
+        };
         this.sendResponse(response);
     }
 
