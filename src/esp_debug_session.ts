@@ -10,9 +10,9 @@ import {
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import path = require('path');
-import { SerialPort } from 'serialport';
 import { DebugProtocol } from '@vscode/debugprotocol';
 import { GDB } from './gdb';
+import { EspUart } from './esp_uart';
 
 interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
     cwd?: string;
@@ -81,38 +81,11 @@ export class EspDebugSession extends LoggingDebugSession {
         this.sendResponse(response);
     }
 
-    private static async uartInterruptRequest(port: string): Promise<boolean> {
-        return new Promise<boolean>((resolve) => {
-            const serialPort = new SerialPort({
-                path: port,
-                baudRate: 115200,
-                autoOpen: true,
-            });
-
-            serialPort.on('open', () => {
-                serialPort.write(Buffer.from([0x03]), (err) => {
-                    serialPort.close();
-                    resolve(err ? false : true);
-                });
-            });
-
-            serialPort.on('error', (err) => {
-                serialPort.close();
-                resolve(false);
-            });
-        });
-    }
-
-    private async delay(ms: number): Promise<void> {
-        return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-
     protected async launchRequest(response: DebugProtocol.LaunchResponse, args: LaunchRequestArguments, request?: DebugProtocol.Request) {
-        if(!await EspDebugSession.uartInterruptRequest(args.port)) {
-            this.sendErrorResponse(response, 1, "Sending interrupt request to " + args.port + " failed");
-            return;
-        }
-        await this.delay(500);
+        if(!await EspUart.targetReset(args.port))
+            return this.sendErrorResponse(response, 1, "Unable to reset target device, please check connection again");
+        if(!await EspUart.interruptRequest(args.port))
+            return this.sendErrorResponse(response, 1, "Sending interrupt request to " + args.port + " failed");
 
         const gdbCmd = path.join(__dirname, '..', 'gdb', 'win', 'xtensa-esp-elf-gdb', 'bin', 'xtensa-esp32-elf-gdb');
         const gdbArgs = [
