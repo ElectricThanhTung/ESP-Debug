@@ -111,5 +111,8 @@
   },
   "dependencies": {
     "@vscode/debugadapter": "^1.56.0"
-  }
+  },
+  "files": [
+    "gdb"
+  ]
 }
