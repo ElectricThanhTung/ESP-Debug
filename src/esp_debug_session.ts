@@ -22,6 +22,7 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 
 export class EspDebugSession extends LoggingDebugSession {
     private gdb: GDB = new GDB();
+    private gdbOutput = vscode.window.createOutputChannel('GDB Logs');
 
     public constructor() {
         super('esp-debug.txt');
@@ -59,6 +60,8 @@ export class EspDebugSession extends LoggingDebugSession {
 
         // response.body.exceptionBreakpointFilters = [{filter: 'all', label: 'Caught Exceptions', default: false}];
 
+        this.gdbOutput.show();
+
         this.gdb.on("stopped", (reason) => {
             this.sendEvent(new StoppedEvent('stop', 1));
         });
@@ -68,11 +71,11 @@ export class EspDebugSession extends LoggingDebugSession {
         });
     
         this.gdb.on("gdbout", (data) => {
-            console.log(data);
+            this.gdbOutput.appendLine(data);
         });
 
         this.gdb.on("gdberr", (data) => {
-            console.log(data);
+            this.gdbOutput.appendLine(data);
         });
 
         this.sendResponse(response);
