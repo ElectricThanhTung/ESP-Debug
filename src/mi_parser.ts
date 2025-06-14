@@ -68,11 +68,7 @@ export class MIParser {
     }
 
     private static parseString(str: string): string {
-        for(let i = 1; i < str.length; i++) {
-            if(str[i] === '"')
-                return JSON.parse(`"${str.substring(1, i)}"`);
-        }
-        throw new Error('Invalid GDB machine interface string');
+        return JSON.parse(str);
     }
 
     private static parseArray(str: string): any[] {
@@ -84,6 +80,9 @@ export class MIParser {
     }
 
     public static parseObject(str: string): Record<string, any> {
+        str = str.trim();
+        if(str[0] === '{')
+            str = str.substring(1, str.lastIndexOf('}'));
         const values: Record<string, any> = {};
         const elements = MIParser.separateElements(str);
         for(let i = 0; i < elements.length; i++) {
@@ -100,18 +99,17 @@ export class MIParser {
             return MIParser.parseString(str);
         else if(str[0] === '[')
             return MIParser.parseArray(str);
-        else if(str[0] === '{')
-            return MIParser.parseObject(str.substring(1, str.length - 1));
         else
             return MIParser.parseObject(str);
     }
 
-    public static parser(str: string): [string, Record<string, any>] {
+    public static parser(str: string): Record<string, any> {
         let endOfTypeIndex = str.indexOf(',');
         if(endOfTypeIndex < 0)
             endOfTypeIndex = str.length;
-        const status = str.substring(1, endOfTypeIndex);
+        const status = str.substring(1, endOfTypeIndex).trim();
         const data = (endOfTypeIndex >= str.length) ? {} : MIParser.parseValues(str.substring(endOfTypeIndex + 1));
-        return [status, data];
+        data['gdb status'] = status;
+        return data;
     }
 }

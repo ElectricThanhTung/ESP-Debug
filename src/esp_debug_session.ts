@@ -128,6 +128,19 @@ export class EspDebugSession extends LoggingDebugSession {
     }
 
     protected async setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse, args: DebugProtocol.SetBreakpointsArguments, request?: DebugProtocol.Request) {
+        if(args.lines && args.source.path) {
+            try {
+                const bkps = await this.gdb.setBreakPointsRequest(args.lines, args.source.path);
+                response.body = {
+                    breakpoints: bkps as Breakpoint[]
+                };
+                this.sendResponse(response);
+            }
+            catch(exception: any) {
+                this.sendErrorResponse(response, 1, exception);
+            }
+            return;
+        }
         this.sendResponse(response);
     }
 
