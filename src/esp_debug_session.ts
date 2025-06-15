@@ -62,20 +62,13 @@ export class EspDebugSession extends LoggingDebugSession {
 
         this.gdbOutput.show();
 
-        this.gdb.on("stopped", (reason) => {
-            this.sendEvent(new StoppedEvent('stop', 1));
-        });
-
-        this.gdb.on("stdout", (data) => {
-            this.sendEvent(new OutputEvent(data, 'console'));
-        });
-    
-        this.gdb.on("gdbout", (data) => {
-            this.gdbOutput.appendLine(data);
-        });
+        this.gdb.on("stopped", (reason) => this.sendEvent(new StoppedEvent('stop', 1)));
+        this.gdb.on("stdout", (data) => this.sendEvent(new OutputEvent(data, 'console')));
+        this.gdb.on("gdbout", (data) => this.gdbOutput.appendLine(data));
 
         this.gdb.on("gdberr", (data) => {
             this.gdbOutput.appendLine(data);
+            this.sendEvent(new TerminatedEvent());
         });
 
         this.sendResponse(response);
