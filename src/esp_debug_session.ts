@@ -90,7 +90,7 @@ export class EspDebugSession extends LoggingDebugSession {
             '-ex', `target remote \\\\.\\${args.port}`
         ];
 
-        if(!this.gdb.launch(gdbCmd, gdbArgs)) {
+        if(!await this.gdb.launch(gdbCmd, gdbArgs)) {
             this.sendErrorResponse(response, 1, "GDB launch fail");
             return;
         }

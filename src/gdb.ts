@@ -15,9 +15,11 @@ export class GDB extends EventEmitter {
     private gdbProcess?: ChildProcess.ChildProcess;
     private stdoutbuff = '';
     private stderrbuff = '';
-    private status: 'startup' | 'stopped' | 'running' = 'startup';
+    private isReady = false;
+    private status: 'launching' | 'stopped' | 'running' = 'launching';
     private breakPoints: any[] = [];
     private gdbSemaphore = new Semaphore(1);
+    private readyCallback?: () => void;
     private responseCallback?: (data: any) => void;
 
     private stackFrame: GDBStackFrame[] = [];
@@ -26,16 +28,28 @@ export class GDB extends EventEmitter {
         super();
     }
 
-    public launch(cmd: string, args: string[]): boolean {
-        let cwd = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri.fsPath : '';
+    public launch(cmd: string, args: string[], timeout = 60000): Promise<boolean> {
+        return new Promise<boolean>((resolve) => {
+            let cwd = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri.fsPath : '';
 
-        this.gdbProcess = ChildProcess.spawn(cmd, args, { cwd: cwd, stdio: 'pipe' });
-        this.gdbProcess.stdout?.on("data", (data: any) => this.stdout(data));
-        this.gdbProcess.stderr?.on("data", (data: any) => this.stderr(data));
-        this.gdbProcess.on("error", (err: any) => this.onError(err));
-        this.gdbProcess.on("exit", (number: number, signal: string) => this.onExit(number, signal));
+            this.gdbProcess = ChildProcess.spawn(cmd, args, { cwd: cwd, stdio: 'pipe' });
+            this.gdbProcess.stdout?.on("data", (data: any) => this.stdout(data));
+            this.gdbProcess.stderr?.on("data", (data: any) => this.stderr(data));
+            this.gdbProcess.on("error", (err: any) => this.onError(err));
+            this.gdbProcess.on("exit", (number: number, signal: string) => this.onExit(number, signal));
 
-        return true;
+            const timeoutTask = setTimeout(() => {
+                this.removeReadyCallback();
+                resolve(false);
+            }, timeout);
+
+            this.onReady(() => {
+                clearTimeout(timeoutTask);
+                resolve(true);
+            });
+
+            return true;
+        });
     }
 
     private static getLine(data: string): string | undefined {
@@ -95,6 +109,15 @@ export class GDB extends EventEmitter {
                 this.responseCallback = undefined;
             }
         }
+        else if(str[0] === '(') {
+            if(!this.isReady && /^\(gdb\)/.test(str)) {
+                this.isReady = true;
+                if(this.readyCallback) {
+                    this.readyCallback();
+                    this.readyCallback = undefined;
+                }
+            }
+        }
         else if(str[0] === '@')
             this.emit('stdout', MIParser.parseValues(str.substring(1)));
         return false;
@@ -111,14 +134,24 @@ export class GDB extends EventEmitter {
 
     private onError(err: any) {
         this.emit('gdberr', err);
+        this.readyCallback = undefined;
+        this.responseCallback = undefined;
     }
 
     private onExit(code: number, signal: string) {
-        this.emit('gdberr', `Process exited with code: ${code}` + signal ? `, signal: ${signal}` : '');
+        this.onError(`Process exited with code: ${code}` + signal ? `, signal: ${signal}` : '');
+    }
+
+    private onReady(callback: () => void) {
+        this.readyCallback = callback;
     }
 
     private onResponseReceived(callback: (data: any) => void) {
         this.responseCallback = callback;
+    }
+
+    private removeReadyCallback() {
+        this.readyCallback = undefined;
     }
 
     private removeResponseCallback() {
