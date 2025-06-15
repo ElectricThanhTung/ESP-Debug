@@ -2,11 +2,11 @@
 import { SerialPort } from 'serialport';
 
 export class EspUart {
-    private static async open(port: string): Promise<SerialPort | undefined> {
+    private static async open(port: string, baudrate: number = 115200): Promise<SerialPort | undefined> {
         return new Promise<SerialPort | undefined>((resolve) => {
             const serialPort = new SerialPort({
                 path: port,
-                baudRate: 115200,
+                baudRate: baudrate,
                 autoOpen: true,
             });
             serialPort.on('open', () => {
@@ -58,8 +58,8 @@ export class EspUart {
         return true;
     }
 
-    public static async interruptRequest(port: string): Promise<boolean> {
-        const serialPort = await EspUart.open(port);
+    public static async interruptRequest(port: string, baudrate: number): Promise<boolean> {
+        const serialPort = await EspUart.open(port, baudrate);
         if(!serialPort)
             return false;
         if(!await EspUart.write(serialPort, Buffer.from([0x03]))) {
