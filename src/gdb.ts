@@ -28,7 +28,7 @@ export class GDB extends EventEmitter {
         super();
     }
 
-    public launch(cmd: string, args: string[], timeout = 60000): Promise<boolean> {
+    public launch(cmd: string, args: string[], timeout = 30000): Promise<boolean> {
         return new Promise<boolean>((resolve) => {
             let cwd = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri.fsPath : '';
 
@@ -139,7 +139,7 @@ export class GDB extends EventEmitter {
     }
 
     private onExit(code: number, signal: string) {
-        this.onError(`Process exited with code: ${code}` + signal ? `, signal: ${signal}` : '');
+        this.onError(`Process exited with code: ${code}` + (signal ? `, signal: ${signal}` : ''));
     }
 
     private onReady(callback: () => void) {
@@ -232,7 +232,8 @@ export class GDB extends EventEmitter {
 
     public async terminateRequest() {
         await this.writeCmd('-target-disconnect');
-        this.writeCmd('-gdb-exit');
+        await this.writeCmd('-gdb-exit');
+        this.gdbProcess?.kill();
     }
 
     private getRemovedBreakpoints(lines: number[], source: string): any[] {
