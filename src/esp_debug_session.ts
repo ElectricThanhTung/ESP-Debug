@@ -24,6 +24,7 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 export class EspDebugSession extends LoggingDebugSession {
     private gdb: GDB = new GDB();
     private gdbOutput = vscode.window.createOutputChannel('GDB Logs');
+    private statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 
     public constructor() {
         super('esp-debug.txt');
@@ -65,7 +66,11 @@ export class EspDebugSession extends LoggingDebugSession {
 
         this.gdb.on("stopped", (reason) => this.sendEvent(new StoppedEvent('stop', 1)));
         this.gdb.on("stdout", (data) => this.sendEvent(new OutputEvent(data, 'console')));
-        this.gdb.on("gdbout", (data) => this.gdbOutput.appendLine(data));
+        this.gdb.on("gdbout", (data) => {
+            this.gdbOutput.appendLine(data);
+            if(/\~\"Reading symbols from .+\"/.test(data))
+                this.statusBarItem.text = "$(sync~spin) Reading symbols...";
+        });
 
         this.gdb.on("gdberr", (data) => {
             this.gdbOutput.appendLine(data);
@@ -77,11 +82,19 @@ export class EspDebugSession extends LoggingDebugSession {
 
     protected async launchRequest(response: DebugProtocol.LaunchResponse, args: LaunchRequestArguments, request?: DebugProtocol.Request) {
         const baudrate = args.baudrate ? args.baudrate : 115200;
+        this.statusBarItem.show();
 
-        if(!await EspUart.targetReset(args.port))
+        this.statusBarItem.text = '$(sync~spin) Resetting target...';
+        if(!await EspUart.targetReset(args.port)) {
+            this.statusBarItem.hide();
             return this.sendErrorResponse(response, 1, 'Unable to reset target device, please check connection again');
-        if(!await EspUart.interruptRequest(args.port, baudrate))
+        }
+
+        this.statusBarItem.text = '$(sync~spin) Entering debug mode...';
+        if(!await EspUart.interruptRequest(args.port, baudrate)) {
+            this.statusBarItem.hide();
             return this.sendErrorResponse(response, 1, `Sending interrupt request to ${args.port} failed`);
+        }
 
         const gdbCmd = path.join(__dirname, '..', 'gdb', 'win', 'xtensa-esp-elf-gdb', 'bin', 'xtensa-esp32-elf-gdb');
         const gdbArgs = [
@@ -93,13 +106,17 @@ export class EspDebugSession extends LoggingDebugSession {
             '-ex', `target remote \\\\.\\${args.port}`
         ];
 
+        this.statusBarItem.text = '$(sync~spin) Starting gdb...';
         if(!await this.gdb.launch(gdbCmd, gdbArgs)) {
             this.sendErrorResponse(response, 1, "GDB launch fail");
             this.gdb.terminateRequest();
+            this.statusBarItem.hide();
             return;
         }
         this.sendResponse(response);
         this.sendEvent(new InitializedEvent());
+
+        this.statusBarItem.hide();
     }
 
     protected async attachRequest(response: DebugProtocol.AttachResponse, args: DebugProtocol.AttachRequestArguments, request?: DebugProtocol.Request) {
@@ -110,6 +127,7 @@ export class EspDebugSession extends LoggingDebugSession {
         this.gdb.terminateRequest();
         this.sendResponse(response);
         this.sendEvent(new TerminatedEvent());
+        this.statusBarItem.hide();
     }
 
     protected async disconnectRequest(response: DebugProtocol.DisconnectResponse, args: DebugProtocol.DisconnectArguments, request?: DebugProtocol.Request) {
