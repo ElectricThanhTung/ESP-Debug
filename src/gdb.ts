@@ -10,6 +10,7 @@ import { EventEmitter } from 'events';
 import { GDBStackFrame } from './gdb_stack_frame'
 import { MIParser } from './mi_parser';
 import { Semaphore } from './semaphore';
+import { GdbVar } from './gdb_var';
 
 export class GDB extends EventEmitter {
     private gdbProcess?: ChildProcess.ChildProcess;
@@ -17,6 +18,7 @@ export class GDB extends EventEmitter {
     private stderrbuff = '';
     private isReady = false;
     private status: 'launching' | 'stopped' | 'running' = 'launching';
+    private gdbVars = new Map<string, GdbVar>();
     private breakPoints: any[] = [];
     private gdbCmdSemaphore = new Semaphore(1);
     private readyCallback?: () => void;
@@ -26,6 +28,10 @@ export class GDB extends EventEmitter {
 
     public constructor() {
         super();
+    }
+
+    private clearGdbVarsCache() {
+        this.gdbVars.clear();
     }
 
     public launch(cmd: string, args: string[], timeout = 30000): Promise<boolean> {
@@ -90,6 +96,7 @@ export class GDB extends EventEmitter {
                 case 'stopped':
                     this.status = 'stopped';
                     this.stackFrame = [];
+                    this.clearGdbVarsCache();
                     this.stackFrame.push(this.getStackFrame(data));
                     this.emit('stopped', 'generic');
                     break;
@@ -288,6 +295,42 @@ export class GDB extends EventEmitter {
             }
         }
         return ret;
+    }
+
+    private getGdbVarById(id: number): GdbVar | undefined {
+        for(const [key, value] of this.gdbVars) {
+            if(value.getId() === id)
+                return value;
+        }
+        return undefined;
+    }
+
+    private varIdGenerate(): number {
+        const min = 0x80000000;
+        const max = 0xFFFFFFFF;
+        let id;
+        do {
+            id = Math.floor(Math.random() * (max - min + 1)) + min;
+        } while(this.getGdbVarById(id) !== undefined);
+        return id;
+    }
+
+    private async createVariable(expr: string): Promise<GdbVar | undefined> {
+        const id = this.varIdGenerate();
+        const gdbExpr = expr.replace(/"/g, '\\"')
+        const resp = await this.writeCmd(`-var-create var_${id} * \"${gdbExpr}\"`);
+        if(!resp || resp['gdb status'] !== 'done')
+            return undefined;
+        const ret = new GdbVar(id, resp);
+        this.gdbVars.set(expr, ret);
+        return ret;
+    }
+
+    public async evaluateRequest(expr: string): Promise<Variable | undefined> {
+        const gdbVar = this.gdbVars.has(expr) ? this.gdbVars.get(expr) : await this.createVariable(expr);
+        if(!gdbVar)
+            return undefined;
+        return gdbVar.toVariable(expr);
     }
 
     private static convertToStackFrame(stackFrames: GDBStackFrame[]): StackFrame[] {

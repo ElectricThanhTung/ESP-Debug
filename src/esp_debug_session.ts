@@ -208,6 +208,15 @@ export class EspDebugSession extends LoggingDebugSession {
     }
 
     protected async evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments) {
+        if(!args.expression)
+            return this.sendResponse(response);
+        const ret = await this.gdb?.evaluateRequest(args.expression);
+        if(!ret)
+            return this.sendResponse(response);
+        response.body = {
+            result: ret.value,
+            variablesReference: ret.variablesReference
+        };
         this.sendResponse(response);
     }
 
