@@ -18,7 +18,7 @@ export class GDB extends EventEmitter {
     private isReady = false;
     private status: 'launching' | 'stopped' | 'running' = 'launching';
     private breakPoints: any[] = [];
-    private gdbSemaphore = new Semaphore(1);
+    private gdbCmdSemaphore = new Semaphore(1);
     private readyCallback?: () => void;
     private responseCallback?: (data: any) => void;
 
@@ -158,19 +158,19 @@ export class GDB extends EventEmitter {
 
     private writeCmd(cmd: string, timeout = 500): Promise<any> {
         return new Promise<any>((resolve) => {
-            this.gdbSemaphore.acquire().then(() => {
+            this.gdbCmdSemaphore.acquire().then(() => {
                 this.emit('gdbout', cmd);
 
                 this.gdbProcess?.stdin?.write(cmd + '\n');
 
                 const timeoutTask = setTimeout(() => {
                     this.removeResponseCallback();
-                    this.gdbSemaphore.release();
+                    this.gdbCmdSemaphore.release();
                     resolve(undefined);
                 }, timeout);
 
                 this.onResponseReceived((data) => {
-                    this.gdbSemaphore.release();
+                    this.gdbCmdSemaphore.release();
                     clearTimeout(timeoutTask);
                     resolve(data);
                 });

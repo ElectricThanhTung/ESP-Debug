@@ -22,7 +22,7 @@ export class Semaphore {
 
     public release() {
         this.counter++;
-        if (this.tasks.length > 0) {
+        if(this.tasks.length > 0) {
             const task = this.tasks.shift();
             if(task)
                 task();
