@@ -148,8 +148,24 @@ export class GDB extends EventEmitter {
         this.responseCallback = undefined;
     }
 
+    private waitReady(): Promise<void> {
+        return new Promise<void>((resolve) => {
+            const checkReady = () => {
+                if(this.ready) {
+                    this.ready = false;
+                    resolve();
+                }
+                else
+                    setTimeout(checkReady, 0);
+            }
+            checkReady();
+        });
+    }
+
     private writeCmd(cmd: string, timeout = 500): Promise<any> {
-        return this.gdbCmdMutex.lock(async () => new Promise<any>((resolve) => {
+        return this.gdbCmdMutex.lock(async () => new Promise<any>(async (resolve) => {
+            await this.waitReady();
+
             this.emit('gdbout', cmd);
 
             this.gdbProcess?.stdin?.write(cmd + '\n');
