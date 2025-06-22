@@ -24,7 +24,7 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 export class EspDebugSession extends LoggingDebugSession {
     private gdb: GDB = new GDB();
     private gdbOutput = vscode.window.createOutputChannel('GDB Logs');
-    private statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    private statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     private currentThreadId = 0;
 
     public constructor() {
