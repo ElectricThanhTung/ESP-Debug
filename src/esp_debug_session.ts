@@ -65,9 +65,11 @@ export class EspDebugSession extends LoggingDebugSession {
 
         this.gdbOutput.show();
 
-        this.gdb.on("stopped", (threadId, reason) => {
+        this.gdb.on("stopped", (reason, threadId, allThreadsStopped) => {
             this.currentThreadId = threadId;
-            this.sendEvent(new StoppedEvent('stop', threadId));
+            const stoppedEvent = new StoppedEvent(reason, threadId);
+            (stoppedEvent as any).body.allThreadsStopped = allThreadsStopped;
+            this.sendEvent(stoppedEvent);
         });
         this.gdb.on("stdout", (data) => this.sendEvent(new OutputEvent(data, 'console')));
         this.gdb.on("gdbout", (data) => {

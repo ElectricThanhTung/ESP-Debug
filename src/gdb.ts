@@ -85,8 +85,10 @@ export class GDB extends EventEmitter {
                     this.status = 'stopped';
                     this.clearThreadsCache();
                     this.clearGdbVarsCache();
+                    const reason = data['reason'] ? data['reason'] : 'stop';
                     const threadId = parseInt(data['thread-id']);
-                    this.emit('stopped', threadId, 'generic');
+                    const allThreadsStopped = (data['stopped-threads'] === 'all') ? true : false;
+                    this.emit('stopped', reason, threadId, allThreadsStopped);
                     break;
                 default:
                     break;
