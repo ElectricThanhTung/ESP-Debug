@@ -89,7 +89,17 @@ export class MIParser {
             const pair = elements[i];
             const index = pair.indexOf('=');
             const key = pair.substring(0, index);
-            values[key] = MIParser.parseValues(pair.substring(index + 1));
+            const value = MIParser.parseValues(pair.substring(index + 1));
+            if(values[key] === undefined)
+                values[key] = value;
+            else {
+                if(Array.isArray(values[key]))
+                    values[key].push(value);
+                else {
+                    const firstValue = values[key];
+                    values[key] = [firstValue, value];
+                }
+            }
         }
         return values;
     }
