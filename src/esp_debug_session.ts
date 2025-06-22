@@ -199,7 +199,7 @@ export class EspDebugSession extends LoggingDebugSession {
     protected async scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments, request?: DebugProtocol.Request) {
         const scopes: DebugProtocol.Scope[] = [
             new Scope("Locals", 0x100000000 + args.frameId, true),
-            new Scope("Registers", 0x200000000, true),
+            new Scope("Registers", 0x200000000 + args.frameId, true),
         ];
         response.body = {
             scopes: scopes
@@ -217,7 +217,11 @@ export class EspDebugSession extends LoggingDebugSession {
             this.sendResponse(response);
         }
         else if(variableType === 2n) {      /* Registers */
-
+            const frameId = args.variablesReference & 0xFFFFFFFF;
+            const ret =  await this.gdb.registerRequest(this.currentThreadId, frameId);
+            if(ret)
+                response.body = {variables: ret};
+            this.sendResponse(response);
         }
         else {
             const ret = await this.gdb?.variablesRequest(args.variablesReference);

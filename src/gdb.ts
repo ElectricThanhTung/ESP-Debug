@@ -20,6 +20,7 @@ export class GDB extends EventEmitter {
     private status: 'launching' | 'stopped' | 'running' = 'launching';
     private gdbVars = new Map<string, GdbVar>();
     private breakPoints: any[] = [];
+    private registersName: string[] | undefined;
     private gdbCmdSemaphore = new Semaphore(1);
     private readyCallback?: () => void;
     private responseCallback?: (data: any) => void;
@@ -388,6 +389,38 @@ export class GDB extends EventEmitter {
             ret.push(v);
         }
         return ret;
+    }
+
+    private async registerNamesRequest(): Promise<string[] | undefined> {
+        const resp = await this.writeCmd('-data-list-register-names');
+        if(!resp || resp['gdb status'] !== 'done')
+            return undefined;
+        return resp['register-names'] as (string[] | undefined);
+    }
+
+    private async registerValuesRequest(threadId: number, frameId: number, regs: string[]): Promise<Variable[] | undefined> {
+        let resp = await this.writeCmd(`-stack-select-frame --thread ${threadId} ${frameId}`);
+        if(!resp || resp['gdb status'] !== 'done')
+            return undefined;
+        resp = await this.writeCmd('-data-list-register-values x');
+        if(!resp || resp['gdb status'] !== 'done' || resp['register-values'] === undefined)
+            return undefined;
+        const ret: Variable[] = [];
+        for(const e of resp['register-values']) {
+            const num = parseInt(e.number);
+            ret.push(new Variable(regs[num], e.value));
+        }
+        return ret;
+    }
+
+    public async registerRequest(threadId: number, frameId: number): Promise<Variable[] | undefined> {
+        if(!this.registersName) {
+            const registersName = await this.registerNamesRequest();
+            if(!registersName)
+                return undefined;
+            this.registersName = registersName;
+        }
+        return await this.registerValuesRequest(threadId, frameId, this.registersName);
     }
 
     public async evaluateRequest(expr: string): Promise<Variable | undefined> {
