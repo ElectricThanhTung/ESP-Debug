@@ -309,11 +309,12 @@ export class GDB extends EventEmitter {
         return id;
     }
 
-    private async createVariable(expr: string): Promise<GdbVar | undefined> {
+    private async createVariable(expr: string, threadId?: number, frameId?: number): Promise<GdbVar | undefined> {
         const id = this.varIdGenerate();
         const name = `var_${id}`;
-        const gdbExpr = expr.replace(/"/g, '\\"')
-        const resp = await this.writeCmd(`-var-create ${name} * \"${gdbExpr}\"`);
+        const gdbExpr = expr.replace(/"/g, '\\"');
+        const thFr = ((threadId !== undefined) && (frameId !== undefined)) ? `--thread ${threadId} --frame ${frameId}` : '';
+        const resp = await this.writeCmd(`-var-create ${thFr} ${name} * \"${gdbExpr}\"`);
         if(!resp || resp['gdb status'] !== 'done')
             return undefined;
         const ret = new GdbVar(id, name, expr, resp);
@@ -328,10 +329,10 @@ export class GDB extends EventEmitter {
         return resp.value as string;
     }
 
-    private async evaluateExpression(expr: string): Promise<GdbVar | undefined> {
+    private async evaluateExpression(expr: string, threadId?: number, frameId?: number): Promise<GdbVar | undefined> {
         let gdbVar = this.getGdbVarByExpression(expr);
         if(gdbVar === undefined)
-            gdbVar = await this.createVariable(expr);
+            gdbVar = await this.createVariable(expr, threadId, frameId);
         return gdbVar;
     }
 
@@ -368,7 +369,7 @@ export class GDB extends EventEmitter {
         for(const e of vars) {
             let v: Variable;
             if((e.value === undefined) || (!/^\d+(\s'\\*.')*$/.test(e.value))) {
-                const gdbVars = await this.evaluateExpression(e.name);
+                const gdbVars = await this.evaluateExpression(e.name, threadId, frameId);
                 v = gdbVars ? gdbVars.toVariable(e.name) : new Variable(e.name, 'not available');
             }
             else
