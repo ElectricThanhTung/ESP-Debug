@@ -15,7 +15,7 @@ export class GDB extends EventEmitter {
     private gdbProcess?: ChildProcess.ChildProcess;
     private stdoutbuff = '';
     private stderrbuff = '';
-    private isReady = false;
+    private ready = false;
     private status: 'launching' | 'stopped' | 'running' = 'launching';
     private gdbVars = new Map<string, GdbVar>();
     private breakPoints: any[] = [];
@@ -100,8 +100,8 @@ export class GDB extends EventEmitter {
             }
         }
         else if(str[0] === '(') {
-            if(!this.isReady && /^\(gdb\)/.test(str)) {
-                this.isReady = true;
+            if(!this.ready && /^\(gdb\)/.test(str)) {
+                this.ready = true;
                 if(this.readyCallback) {
                     this.readyCallback();
                     this.readyCallback = undefined;
