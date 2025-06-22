@@ -98,7 +98,8 @@ export class GDB extends EventEmitter {
                     this.stackFrame = [];
                     this.clearGdbVarsCache();
                     this.stackFrame.push(this.getStackFrame(data));
-                    this.emit('stopped', 'generic');
+                    const threadId = parseInt(data['thread-id']);
+                    this.emit('stopped', threadId, 'generic');
                     break;
                 default:
                     break;
@@ -306,6 +307,10 @@ export class GDB extends EventEmitter {
         return this.gdbVars.get(id.toString());
     }
 
+    private getGdbVarByExpression(expr: string): GdbVar | undefined {
+        return this.gdbVars.get(expr);
+    }
+
     private varIdGenerate(): number {
         const min = 0x80000000;
         const max = 0xFFFFFFFF;
@@ -330,9 +335,16 @@ export class GDB extends EventEmitter {
 
     private async varEvaluateExpression(varName: string): Promise<string | undefined> {
         const resp = await this.writeCmd(`-var-evaluate-expression ${varName}`);
-        if(!resp)
+        if(!resp || resp['gdb status'] !== 'done')
             return undefined;
         return resp.value as string;
+    }
+
+    private async evaluateExpression(expr: string): Promise<GdbVar | undefined> {
+        let gdbVar = this.getGdbVarByExpression(expr);
+        if(gdbVar === undefined)
+            gdbVar = await this.createVariable(expr);
+        return gdbVar;
     }
 
     public async variablesRequest(ref: number): Promise<Variable[] | undefined> {
@@ -359,11 +371,27 @@ export class GDB extends EventEmitter {
         return ret;
     }
 
-    public async evaluateRequest(expr: string): Promise<Variable | undefined> {
-        const gdbVar = this.gdbVars.has(expr) ? this.gdbVars.get(expr) : await this.createVariable(expr);
-        if(!gdbVar)
+    public async localVariableRequest(threadId: number, frameId: number): Promise<Variable[] | undefined> {
+        const resp = await this.writeCmd(`-stack-list-variables --thread ${threadId} --frame ${frameId} --simple-values`);
+        if(!resp || resp['gdb status'] !== 'done')
             return undefined;
-        return gdbVar.toVariable(expr);
+        const vars = resp.variables;
+        const ret: Variable[] = [];
+        for(const e of vars) {
+            let v: Variable;
+            if((e.value === undefined) || (!/^\d+(\s'\\*.')*$/.test(e.value))) {
+                const gdbVars = await this.evaluateExpression(e.name);
+                v = gdbVars ? gdbVars.toVariable(e.name) : new Variable(e.name, 'not available');
+            }
+            else
+                v = new Variable(e.name, e.value);
+            ret.push(v);
+        }
+        return ret;
+    }
+
+    public async evaluateRequest(expr: string): Promise<Variable | undefined> {
+        return (await this.evaluateExpression(expr))?.toVariable(expr);
     }
 
     private static convertToStackFrame(stackFrames: GDBStackFrame[]): StackFrame[] {

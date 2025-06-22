@@ -25,6 +25,7 @@ export class EspDebugSession extends LoggingDebugSession {
     private gdb: GDB = new GDB();
     private gdbOutput = vscode.window.createOutputChannel('GDB Logs');
     private statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    private currentThreadId = 0;
 
     public constructor() {
         super('esp-debug.txt');
@@ -64,7 +65,10 @@ export class EspDebugSession extends LoggingDebugSession {
 
         this.gdbOutput.show();
 
-        this.gdb.on("stopped", (reason) => this.sendEvent(new StoppedEvent('stop', 1)));
+        this.gdb.on("stopped", (threadId, reason) => {
+            this.currentThreadId = threadId;
+            this.sendEvent(new StoppedEvent('stop', threadId));
+        });
         this.gdb.on("stdout", (data) => this.sendEvent(new OutputEvent(data, 'console')));
         this.gdb.on("gdbout", (data) => {
             this.gdbOutput.appendLine(data);
@@ -194,8 +198,8 @@ export class EspDebugSession extends LoggingDebugSession {
 
     protected async scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments, request?: DebugProtocol.Request) {
         const scopes: DebugProtocol.Scope[] = [
-            new Scope("Local", 0x100000000 + args.frameId, true),
-            new Scope("Global", 0x200000000, true),
+            new Scope("Locals", 0x100000000 + args.frameId, true),
+            new Scope("Registers", 0x200000000, true),
         ];
         response.body = {
             scopes: scopes
@@ -204,10 +208,23 @@ export class EspDebugSession extends LoggingDebugSession {
     }
 
     protected async variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments, request?: DebugProtocol.Request) {
-        const ret = await this.gdb?.variablesRequest(args.variablesReference);
-        if(ret)
-            response.body = {variables: ret};
-        this.sendResponse(response);
+        const variableType: bigint = BigInt(args.variablesReference) >> 32n;
+        if(variableType === 1n) {           /* Locals */
+            const frameId = args.variablesReference & 0xFFFFFFFF;
+            const ret = await this.gdb.localVariableRequest(this.currentThreadId, frameId);
+            if(ret)
+                response.body = {variables: ret};
+            this.sendResponse(response);
+        }
+        else if(variableType === 2n) {      /* Registers */
+
+        }
+        else {
+            const ret = await this.gdb?.variablesRequest(args.variablesReference);
+            if(ret)
+                response.body = {variables: ret};
+            this.sendResponse(response);
+        }
     }
 
     protected async evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments) {
