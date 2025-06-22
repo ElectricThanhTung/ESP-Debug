@@ -7,7 +7,6 @@ import * as path from "path";
 import * as vscode from 'vscode';
 import * as ChildProcess from 'child_process';
 import { EventEmitter } from 'events';
-import { GDBStackFrame } from './gdb_stack_frame'
 import { MIParser } from './mi_parser';
 import { Semaphore } from './semaphore';
 import { GdbVar } from './gdb_var';
@@ -25,14 +24,8 @@ export class GDB extends EventEmitter {
     private readyCallback?: () => void;
     private responseCallback?: (data: any) => void;
 
-    private stackFrame: GDBStackFrame[] = [];
-
     public constructor() {
         super();
-    }
-
-    private clearGdbVarsCache() {
-        this.gdbVars.clear();
     }
 
     public launch(cmd: string, args: string[], timeout = 30000): Promise<boolean> {
@@ -82,23 +75,13 @@ export class GDB extends EventEmitter {
         }
     }
 
-    private getStackFrame(data: Record<string, any>): GDBStackFrame {
-        const addr = parseInt(data.frame.addr, 16);
-        const func = data.frame.func;
-        const file = data.frame.file;
-        const line = parseInt(data.frame.line);
-        return new GDBStackFrame(addr, line, func, file);
-    }
-
     private checkStatus(str: string): boolean {
         if(str[0] === '*') {
             const data = MIParser.parser(str);
             switch(data['gdb status']) {
                 case 'stopped':
                     this.status = 'stopped';
-                    this.stackFrame = [];
                     this.clearGdbVarsCache();
-                    this.stackFrame.push(this.getStackFrame(data));
                     const threadId = parseInt(data['thread-id']);
                     this.emit('stopped', threadId, 'generic');
                     break;
@@ -299,6 +282,10 @@ export class GDB extends EventEmitter {
         return ret;
     }
 
+    private clearGdbVarsCache() {
+        this.gdbVars.clear();
+    }
+
     private addGdbVarToMap(expr: string, id: number, v: GdbVar) {
         this.gdbVars.set(expr, v);
         this.gdbVars.set(id.toString(), v);
@@ -427,24 +414,23 @@ export class GDB extends EventEmitter {
         return (await this.evaluateExpression(expr))?.toVariable(expr);
     }
 
-    private static convertToStackFrame(stackFrames: GDBStackFrame[]): StackFrame[] {
+    public async stackFrameRequest(threadId: number, startFrame: number, levels: number): Promise<StackFrame[] | undefined> {
+        const resp = await this.writeCmd(`-stack-list-frames --thread ${threadId} ${startFrame} ${levels}`);
+        if(!resp || resp['gdb status'] !== 'done' || resp.stack === undefined)
+            return undefined;
         const ret: StackFrame[] = [];
-        for(let i = 0; i < stackFrames.length; i++) {
-            const addr = stackFrames[i].addr;
-            const func = stackFrames[i].func;
-            const file = stackFrames[i].file;
-            const line = stackFrames[i].line;
+        for(const e of resp.stack) {
+            const id = parseInt(e.frame.level);
+            const addr = parseInt(e.frame.addr, 16);
+            const func = e.frame.func;
+            const file = e.frame.fullname;
+            const line = parseInt(e.frame.line);
+
             const src = new Source(file.substring(file.lastIndexOf('/')), file);
-            const sf = new StackFrame(i, func, src, line);
+            const sf = new StackFrame(id, func, src, line);
             sf.instructionPointerReference = addr.toString();
             ret.push(sf);
         }
         return ret;
-    }
-
-    public async stackFrameRequest(): Promise<StackFrame[]> {
-        return new Promise<StackFrame[]>((resolve) => {
-            resolve(GDB.convertToStackFrame(this.stackFrame));
-        });
     }
 }

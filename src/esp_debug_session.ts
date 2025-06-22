@@ -245,7 +245,11 @@ export class EspDebugSession extends LoggingDebugSession {
     }
 
     protected async stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments) {
-        const frames = await this.gdb.stackFrameRequest();
+        const startFrame = (args.startFrame !== undefined) ? args.startFrame : 0;
+        const levels = (args.levels !== undefined) ? args.levels : Infinity;
+        const frames = await this.gdb.stackFrameRequest(args.threadId, startFrame, levels);
+        if(!frames)
+            return this.sendErrorResponse(response, 1, 'Cound not read stack frame');
         response.body = {
             stackFrames: frames,
             totalFrames: frames.length,
