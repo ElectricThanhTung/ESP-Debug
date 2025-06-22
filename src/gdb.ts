@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import * as ChildProcess from 'child_process';
 import { EventEmitter } from 'events';
 import { MIParser } from './mi_parser';
-import { Semaphore } from './semaphore';
+import { Mutex } from './mutex';
 import { GdbVar } from './gdb_var';
 
 export class GDB extends EventEmitter {
@@ -20,7 +20,7 @@ export class GDB extends EventEmitter {
     private gdbVars = new Map<string, GdbVar>();
     private breakPoints: any[] = [];
     private registersName: string[] | undefined;
-    private gdbCmdSemaphore = new Semaphore(1);
+    private gdbCmdMutex = new Mutex();
     private readyCallback?: () => void;
     private responseCallback?: (data: any) => void;
 
@@ -149,25 +149,21 @@ export class GDB extends EventEmitter {
     }
 
     private writeCmd(cmd: string, timeout = 500): Promise<any> {
-        return new Promise<any>((resolve) => {
-            this.gdbCmdSemaphore.acquire().then(() => {
-                this.emit('gdbout', cmd);
+        return this.gdbCmdMutex.lock(async () => new Promise<any>((resolve) => {
+            this.emit('gdbout', cmd);
 
-                this.gdbProcess?.stdin?.write(cmd + '\n');
+            this.gdbProcess?.stdin?.write(cmd + '\n');
 
-                const timeoutTask = setTimeout(() => {
-                    this.removeResponseCallback();
-                    this.gdbCmdSemaphore.release();
-                    resolve(undefined);
-                }, timeout);
+            const timeoutTask = setTimeout(() => {
+                this.removeResponseCallback();
+                resolve(undefined);
+            }, timeout);
 
-                this.onResponseReceived((data) => {
-                    this.gdbCmdSemaphore.release();
-                    clearTimeout(timeoutTask);
-                    resolve(data);
-                });
+            this.onResponseReceived((data) => {
+                clearTimeout(timeoutTask);
+                resolve(data);
             });
-        });
+        }));
     }
 
     public async continueRequest(): Promise<boolean> {
