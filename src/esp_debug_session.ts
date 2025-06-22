@@ -261,12 +261,17 @@ export class EspDebugSession extends LoggingDebugSession {
         this.sendResponse(response);
     }
 
-    protected threadsRequest(response: DebugProtocol.ThreadsResponse) {
-        response.body = {
-            threads: [
-                new Thread(1, 'thread 1'),
-            ]
-        };
+    protected async threadsRequest(response: DebugProtocol.ThreadsResponse) {
+        const threads = await this.gdb.threadRequest();
+        if(!threads) {
+            response.body = {
+                threads: [
+                    new Thread(1, 'thread 1'),
+                ]
+            };
+            return this.sendResponse(response);
+        }
+        response.body = { threads: threads };
         this.sendResponse(response);
     }
 }

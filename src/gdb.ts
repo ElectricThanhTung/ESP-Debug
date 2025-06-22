@@ -1,7 +1,8 @@
 
 import {
     StackFrame, Source,
-    Variable, Breakpoint
+    Variable, Breakpoint,
+    Thread
 } from '@vscode/debugadapter';
 import * as path from "path";
 import * as vscode from 'vscode';
@@ -19,6 +20,7 @@ export class GDB extends EventEmitter {
     private status: 'launching' | 'stopped' | 'running' = 'launching';
     private gdbVars = new Map<string, GdbVar>();
     private breakPoints: any[] = [];
+    private threadsCache?: Thread[];
     private registersName: string[] | undefined;
     private gdbCmdMutex = new Mutex();
     private readyCallback?: () => void;
@@ -81,6 +83,7 @@ export class GDB extends EventEmitter {
             switch(data['gdb status']) {
                 case 'stopped':
                     this.status = 'stopped';
+                    this.clearThreadsCache();
                     this.clearGdbVarsCache();
                     const threadId = parseInt(data['thread-id']);
                     this.emit('stopped', threadId, 'generic');
@@ -294,6 +297,10 @@ export class GDB extends EventEmitter {
         return ret;
     }
 
+    private clearThreadsCache() {
+        this.threadsCache = undefined;
+    }
+
     private clearGdbVarsCache() {
         this.gdbVars.clear();
     }
@@ -425,7 +432,7 @@ export class GDB extends EventEmitter {
     }
 
     public async stackFrameRequest(threadId: number, startFrame: number, levels: number): Promise<StackFrame[] | undefined> {
-        const resp = await this.writeCmd(`-stack-list-frames --thread ${threadId} ${startFrame} ${levels}`);
+        const resp = await this.writeCmd(`-stack-list-frames --thread ${threadId} ${startFrame} ${levels}`, 1000);
         if(!resp || resp['gdb status'] !== 'done' || resp.stack === undefined)
             return undefined;
         const ret: StackFrame[] = [];
@@ -441,6 +448,28 @@ export class GDB extends EventEmitter {
             sf.instructionPointerReference = addr.toString();
             ret.push(sf);
         }
+        return ret;
+    }
+
+    public async threadRequest(): Promise<Thread[] | undefined> {
+        if(this.threadsCache)
+            return this.threadsCache;
+        const resp = await this.writeCmd('-thread-list-ids', 1000);
+        if(!resp || resp['gdb status'] !== 'done' || resp['thread-ids'] === undefined || resp['thread-ids']['thread-id'] === undefined)
+            return undefined;
+        const ret: Thread[] = [];
+        const threadIds = resp['thread-ids']['thread-id'];
+        if(!Array.isArray(threadIds)) {
+            const id = parseInt(threadIds);
+            ret.push(new Thread(id, `Thread #${id}`));
+        }
+        else {
+            for(const thread of threadIds) {
+                const id = parseInt(thread);
+                ret.push(new Thread(id, `Thread #${id}`));
+            }
+        }
+        this.threadsCache = ret;
         return ret;
     }
 }
