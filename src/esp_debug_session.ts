@@ -211,26 +211,20 @@ export class EspDebugSession extends LoggingDebugSession {
 
     protected async variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments, request?: DebugProtocol.Request) {
         const variableType: bigint = BigInt(args.variablesReference) >> 32n;
+        let ret;
         if(variableType === 1n) {           /* Locals */
             const frameId = args.variablesReference & 0xFFFFFFFF;
-            const ret = await this.gdb.localVariableRequest(this.currentThreadId, frameId);
-            if(ret)
-                response.body = {variables: ret};
-            this.sendResponse(response);
+            ret = await this.gdb.localVariablesRequest(this.currentThreadId, frameId);
         }
         else if(variableType === 2n) {      /* Registers */
             const frameId = args.variablesReference & 0xFFFFFFFF;
-            const ret =  await this.gdb.registerRequest(this.currentThreadId, frameId);
-            if(ret)
-                response.body = {variables: ret};
-            this.sendResponse(response);
+            ret =  await this.gdb.registerRequest(this.currentThreadId, frameId);
         }
-        else {
-            const ret = await this.gdb?.variablesRequest(args.variablesReference);
-            if(ret)
-                response.body = {variables: ret};
-            this.sendResponse(response);
-        }
+        else
+            ret = await this.gdb?.variablesRequest(args.variablesReference);
+        if(ret)
+            response.body = {variables: ret};
+        this.sendResponse(response);
     }
 
     protected async evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments) {

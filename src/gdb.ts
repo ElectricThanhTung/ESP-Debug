@@ -381,7 +381,7 @@ export class GDB extends EventEmitter {
         return ret;
     }
 
-    public async localVariableRequest(threadId: number, frameId: number): Promise<Variable[] | undefined> {
+    public async localVariablesRequest(threadId: number, frameId: number): Promise<Variable[] | undefined> {
         const resp = await this.writeCmd(`-stack-list-variables --thread ${threadId} --frame ${frameId} --simple-values`);
         if(!resp || resp['gdb status'] !== 'done')
             return undefined;
