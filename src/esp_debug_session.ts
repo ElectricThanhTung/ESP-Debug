@@ -204,6 +204,9 @@ export class EspDebugSession extends LoggingDebugSession {
     }
 
     protected async variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments, request?: DebugProtocol.Request) {
+        const ret = await this.gdb?.variablesRequest(args.variablesReference);
+        if(ret)
+            response.body = {variables: ret};
         this.sendResponse(response);
     }
 

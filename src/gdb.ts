@@ -297,12 +297,13 @@ export class GDB extends EventEmitter {
         return ret;
     }
 
+    private addGdbVarToMap(expr: string, id: number, v: GdbVar) {
+        this.gdbVars.set(expr, v);
+        this.gdbVars.set(id.toString(), v);
+    }
+
     private getGdbVarById(id: number): GdbVar | undefined {
-        for(const [key, value] of this.gdbVars) {
-            if(value.getId() === id)
-                return value;
-        }
-        return undefined;
+        return this.gdbVars.get(id.toString());
     }
 
     private varIdGenerate(): number {
@@ -317,12 +318,44 @@ export class GDB extends EventEmitter {
 
     private async createVariable(expr: string): Promise<GdbVar | undefined> {
         const id = this.varIdGenerate();
+        const name = `var_${id}`;
         const gdbExpr = expr.replace(/"/g, '\\"')
-        const resp = await this.writeCmd(`-var-create var_${id} * \"${gdbExpr}\"`);
+        const resp = await this.writeCmd(`-var-create ${name} * \"${gdbExpr}\"`);
         if(!resp || resp['gdb status'] !== 'done')
             return undefined;
-        const ret = new GdbVar(id, resp);
-        this.gdbVars.set(expr, ret);
+        const ret = new GdbVar(id, name, expr, resp);
+        this.addGdbVarToMap(expr, id, ret);
+        return ret;
+    }
+
+    private async varEvaluateExpression(varName: string): Promise<string | undefined> {
+        const resp = await this.writeCmd(`-var-evaluate-expression ${varName}`);
+        if(!resp)
+            return undefined;
+        return resp.value as string;
+    }
+
+    public async variablesRequest(ref: number): Promise<Variable[] | undefined> {
+        const gdbVar = this.getGdbVarById(ref);
+        if(!gdbVar)
+            return undefined;
+        const resp = await this.writeCmd(`-var-list-children ${gdbVar.getName()}`);
+        if(!resp || resp['gdb status'] !== 'done')
+            return undefined;
+        const children = resp.children;
+        const ret: Variable[] = [];
+        for(let i = 0; i < children.length; i++) {
+            const child = children[i].child;
+            if(child['value'] === undefined)
+                child['value'] = await this.varEvaluateExpression(child.name);
+            const id = this.varIdGenerate();
+            const gdbVar = new GdbVar(id, child.name, child.exp, child);
+            this.addGdbVarToMap(child.exp, id, gdbVar);
+            let name = child.exp;
+            if(/^\d+$/.test(name))
+                name = `[${name}]`;
+            ret.push(gdbVar.toVariable(name));
+        }
         return ret;
     }
 
