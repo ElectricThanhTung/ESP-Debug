@@ -387,10 +387,7 @@ export class GDB extends EventEmitter {
     }
 
     private async registerValuesRequest(threadId: number, frameId: number, regs: string[]): Promise<Variable[] | undefined> {
-        let resp = await this.writeCmd(`-stack-select-frame --thread ${threadId} ${frameId}`);
-        if(!resp || resp['gdb status'] !== 'done')
-            return undefined;
-        resp = await this.writeCmd('-data-list-register-values x');
+        let resp = await this.writeCmd(`-data-list-register-values --thread ${threadId} --frame ${frameId} x`);
         if(!resp || resp['gdb status'] !== 'done' || resp['register-values'] === undefined)
             return undefined;
         const ret: Variable[] = [];
