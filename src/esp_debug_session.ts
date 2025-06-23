@@ -22,9 +22,11 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
 }
 
 export class EspDebugSession extends LoggingDebugSession {
+    private launchArgs?: LaunchRequestArguments;
     private gdb: GDB = new GDB();
     private gdbOutput = vscode.window.createOutputChannel('GDB Logs');
     private statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+    private hasRestartRequest = false;
     private currentThreadId = 0;
 
     public constructor() {
@@ -71,35 +73,43 @@ export class EspDebugSession extends LoggingDebugSession {
             (stoppedEvent as any).body.allThreadsStopped = allThreadsStopped;
             this.sendEvent(stoppedEvent);
         });
-        this.gdb.on("stdout", (data) => this.sendEvent(new OutputEvent(data, 'console')));
-        this.gdb.on("gdbout", (data) => {
+        this.gdb.on('stdout', (data) => this.sendEvent(new OutputEvent(data, 'console')));
+        this.gdb.on('gdbout', (data) => {
             this.gdbOutput.appendLine(data);
             if(/\~\"Reading symbols from .+\"/.test(data))
                 this.statusBarItem.text = "$(sync~spin) Reading symbols...";
         });
 
-        this.gdb.on("gdberr", (data) => {
+        this.gdb.on('gdberr', (data) => {
             this.gdbOutput.appendLine(data);
             this.sendEvent(new TerminatedEvent());
         });
 
+        this.gdb.on('gdbexit', (code, signal) => {
+            this.gdbOutput.appendLine(`Process exited with code: ${code}` + (signal ? `, signal: ${signal}` : ''));
+            if(this.hasRestartRequest)
+                this.hasRestartRequest = false;
+            else
+                this.sendEvent(new TerminatedEvent());
+        })
+
         this.sendResponse(response);
     }
 
-    protected async launchRequest(response: DebugProtocol.LaunchResponse, args: LaunchRequestArguments, request?: DebugProtocol.Request) {
+    private async launch(args: LaunchRequestArguments): Promise<string | undefined> {
         const baudrate = args.baudrate ? args.baudrate : 115200;
         this.statusBarItem.show();
 
         this.statusBarItem.text = '$(sync~spin) Resetting target...';
         if(!await EspUart.targetReset(args.port)) {
             this.statusBarItem.hide();
-            return this.sendErrorResponse(response, 1, 'Unable to reset target device, please check connection again');
+            return 'Unable to reset target device, please check connection again';
         }
 
         this.statusBarItem.text = '$(sync~spin) Entering debug mode...';
         if(!await EspUart.interruptRequest(args.port, baudrate)) {
             this.statusBarItem.hide();
-            return this.sendErrorResponse(response, 1, `Sending interrupt request to ${args.port} failed`);
+            return `Sending interrupt request to ${args.port} failed`;
         }
 
         const gdbCmd = path.join(__dirname, '..', 'gdb', 'win', 'xtensa-esp-elf-gdb', 'bin', 'xtensa-esp32-elf-gdb');
@@ -114,15 +124,23 @@ export class EspDebugSession extends LoggingDebugSession {
 
         this.statusBarItem.text = '$(sync~spin) Starting gdb...';
         if(!await this.gdb.launch(gdbCmd, gdbArgs)) {
-            this.sendErrorResponse(response, 1, "GDB launch fail");
             this.gdb.terminateRequest();
             this.statusBarItem.hide();
-            return;
+            return 'GDB launch fail';
         }
-        this.sendResponse(response);
-        this.sendEvent(new InitializedEvent());
 
+        this.sendEvent(new InitializedEvent());
         this.statusBarItem.hide();
+
+        return undefined;
+    }
+
+    protected async launchRequest(response: DebugProtocol.LaunchResponse, args: LaunchRequestArguments, request?: DebugProtocol.Request) {
+        this.launchArgs = args;
+        const err = await this.launch(args);
+        if(err)
+            return this.sendErrorResponse(response, 1, err);
+        this.sendResponse(response);
     }
 
     protected async attachRequest(response: DebugProtocol.AttachResponse, args: DebugProtocol.AttachRequestArguments, request?: DebugProtocol.Request) {
@@ -195,6 +213,10 @@ export class EspDebugSession extends LoggingDebugSession {
     }
 
     protected async restartRequest(response: DebugProtocol.RestartResponse, args: DebugProtocol.RestartArguments, request?: DebugProtocol.Request | undefined) {
+        this.hasRestartRequest = true;
+        await this.gdb.terminateRequest();
+        this.launch(this.launchArgs as LaunchRequestArguments);
+        this.sendEvent(new InitializedEvent());
         this.sendResponse(response);
     }
 

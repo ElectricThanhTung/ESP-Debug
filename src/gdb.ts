@@ -134,7 +134,7 @@ export class GDB extends EventEmitter {
     }
 
     private onExit(code: number, signal: string) {
-        this.onError(`Process exited with code: ${code}` + (signal ? `, signal: ${signal}` : ''));
+        this.emit('gdbexit', code, signal);
     }
 
     private onReady(callback: () => void) {
