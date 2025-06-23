@@ -3,6 +3,7 @@
   "displayName": "esp-debug",
   "description": "",
   "version": "1.0.0",
+  "icon": "images/icons/icon.png",
   "publisher": "ElectricThanhTung",
   "author": {
     "name": "ElectricThanhTung",

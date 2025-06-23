@@ -2,7 +2,7 @@
 
 ESP-Debug is a Visual Studio Code extension designed to support ESP32 debugging over COM port using ESP-IDF's built-in GDB Stub.
 
-![Screenshot](images/screenshot.png)
+![Screenshot](images/screenshots/screenshot.png)
 
 ---
 
