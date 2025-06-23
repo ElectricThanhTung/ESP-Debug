@@ -53,7 +53,7 @@ ESP-Debug is a Visual Studio Code extension designed to support ESP32 debugging 
     <br>
     <br>
 
-    >**NOTE**: If you want to synchronize the selected com port with ESP-IDF extension you can do as following example:
+    >**NOTE**: If you want to synchronize the selected COM port with ESP-IDF extension you can do as following example:
     >```json
     >"port": "${config:idf.portWin}"
     >```
