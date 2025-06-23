@@ -1,7 +1,7 @@
 {
   "name": "esp-debug",
   "displayName": "ESP Debug",
-  "description": "",
+  "description": "Debugging for ESP32 chips with ESP-IDF",
   "version": "1.0.0",
   "icon": "images/icons/icon.png",
   "publisher": "ElectricThanhTung",
