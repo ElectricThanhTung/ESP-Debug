@@ -1,6 +1,6 @@
-# ESP-Debug
+# ESP Debug
 
-ESP-Debug is a Visual Studio Code extension designed to support ESP32 debugging over COM port using ESP-IDF's built-in GDB Stub.
+ESP Debug is a Visual Studio Code extension designed to support ESP32 debugging over COM port using ESP-IDF's built-in GDB Stub.
 
 ![Screenshot](images/screenshots/screenshot.png)
 
@@ -23,7 +23,7 @@ ESP-Debug is a Visual Studio Code extension designed to support ESP32 debugging 
 
 1. **Installing the extension**
 
-    - Install [ESP-Debug](https://marketplace.visualstudio.com/items?itemName=ElectricThanhTung.esp-debug) extension on Visual Studio Code.
+    - Install [ESP Debug Extension](https://marketplace.visualstudio.com/items?itemName=ElectricThanhTung.esp-debug) on Visual Studio Code.
     - Click on the "**Install**" button.
 
 2. **Prerequisites**
@@ -34,7 +34,7 @@ ESP-Debug is a Visual Studio Code extension designed to support ESP32 debugging 
 
 3. **Configuration**
 
-    - Open `Run > Add Configuration... > ESP Debug` to add ***launch.json*** with default configuration. Or you can create it manually with the following content:
+    - In Visual Studio Code, go to `Run > Add Configuration... > ESP Debug` to add ***launch.json*** with default configuration. Or you can create it manually with the following content:
       ```json
       {
           "version": "0.2.0",
