@@ -1,3 +1,5 @@
+## V1.1.1
+- Fix *"Platform not supported"* on Windows.
 ## V1.1.0
 - Linux support.
 - Reduce extension size.
