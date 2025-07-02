@@ -19,6 +19,7 @@ interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
     program: string;
     port: string;
     baudrate?: number;
+    gdbPath?: string;
 }
 
 export class EspDebugSession extends LoggingDebugSession {
@@ -129,7 +130,9 @@ export class EspDebugSession extends LoggingDebugSession {
             return `Sending interrupt request to ${args.port} failed`;
         }
 
-        const gdbPath = EspDebugSession.getGdbPath();
+        const gdbPath = (args.gdbPath && args.gdbPath.trim() !== '') ? args.gdbPath : EspDebugSession.getGdbPath();
+        if(!fs.existsSync(gdbPath))
+            return `${gdbPath} does not exist`;
         const gdbArgs = [
             '-ex', 'set mi-async on',
             args.program,

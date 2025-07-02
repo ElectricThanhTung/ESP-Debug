@@ -60,6 +60,11 @@
                   "type": "number",
                   "description": "Serial baudrate value",
                   "default": 115200
+                },
+                "gdbPath": {
+                  "type": "string",
+                  "description": "Used to override the path to GDB",
+                  "default": "COMx"
                 }
               }
             }
