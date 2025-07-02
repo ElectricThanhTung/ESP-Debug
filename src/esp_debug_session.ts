@@ -96,34 +96,51 @@ export class EspDebugSession extends LoggingDebugSession {
         this.sendResponse(response);
     }
 
+    private static getGdbPath(): string {
+        const platform = process.platform;
+        const gdbPath = path.join(__dirname, '..', 'gdb', platform, 'xtensa-esp-elf-gdb', 'bin', 'xtensa-esp32-elf-gdb');
+        if(!fs.existsSync(gdbPath))
+            return 'Platform not supported';
+        return gdbPath;
+    }
+
+    private static getPortPath(port: string): string {
+        if(process.platform === 'win32') {
+            if(!/^\\\\\.\\/.test(port))
+                return `\\\\.\\${port}`;
+        }
+        return port;
+    }
+
     private async launch(args: LaunchRequestArguments): Promise<string | undefined> {
+        const port = EspDebugSession.getPortPath(args.port);
         const baudrate = args.baudrate ? args.baudrate : 115200;
         this.statusBarItem.show();
 
         this.statusBarItem.text = '$(sync~spin) Resetting target...';
-        if(!await EspUart.targetReset(args.port)) {
+        if(!await EspUart.targetReset(port)) {
             this.statusBarItem.hide();
             return 'Unable to reset target device, please check connection again';
         }
 
         this.statusBarItem.text = '$(sync~spin) Entering debug mode...';
-        if(!await EspUart.interruptRequest(args.port, baudrate)) {
+        if(!await EspUart.interruptRequest(port, baudrate)) {
             this.statusBarItem.hide();
             return `Sending interrupt request to ${args.port} failed`;
         }
 
-        const gdbCmd = path.join(__dirname, '..', 'gdb', 'win', 'xtensa-esp-elf-gdb', 'bin', 'xtensa-esp32-elf-gdb');
+        const gdbPath = EspDebugSession.getGdbPath();
         const gdbArgs = [
             '-ex', 'set mi-async on',
             args.program,
             '--quiet',
             '--interpreter=mi2',
             '-ex', `set serial baud ${baudrate}`,
-            '-ex', `target remote \\\\.\\${args.port}`
+            '-ex', `target remote ${port}`
         ];
 
         this.statusBarItem.text = '$(sync~spin) Starting gdb...';
-        if(!await this.gdb.launch(gdbCmd, gdbArgs)) {
+        if(!await this.gdb.launch(gdbPath, gdbArgs)) {
             this.gdb.terminateRequest();
             this.statusBarItem.hide();
             return 'GDB launch fail';
