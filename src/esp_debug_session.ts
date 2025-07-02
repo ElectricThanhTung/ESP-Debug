@@ -100,8 +100,8 @@ export class EspDebugSession extends LoggingDebugSession {
     private static getGdbPath(): string {
         const platform = process.platform;
         const gdbPath = path.join(__dirname, '..', 'gdb', platform, 'xtensa-esp-elf-gdb', 'bin', 'xtensa-esp32-elf-gdb');
-        if(!fs.existsSync(gdbPath))
-            return 'Platform not supported';
+        if(platform === 'win32')
+            return gdbPath + '.exe';
         return gdbPath;
     }
 
@@ -130,9 +130,17 @@ export class EspDebugSession extends LoggingDebugSession {
             return `Sending interrupt request to ${args.port} failed`;
         }
 
-        const gdbPath = (args.gdbPath && args.gdbPath.trim() !== '') ? args.gdbPath : EspDebugSession.getGdbPath();
-        if(!fs.existsSync(gdbPath))
-            return `${gdbPath} does not exist`;
+        let gdbPath;
+        if(args.gdbPath && args.gdbPath.trim() !== '') {
+            gdbPath = args.gdbPath;
+            if(!fs.existsSync(gdbPath))
+                return `${gdbPath} does not exist`;
+        }
+        else {
+            gdbPath = EspDebugSession.getGdbPath();
+            if(!fs.existsSync(gdbPath))
+                return 'Platform not supported';
+        }
         const gdbArgs = [
             '-ex', 'set mi-async on',
             args.program,
