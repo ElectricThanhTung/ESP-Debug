@@ -2,7 +2,7 @@
   "name": "esp-debug",
   "displayName": "ESP Debug",
   "description": "Debugging for ESP32 chips with ESP-IDF",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "icon": "images/icons/icon.png",
   "publisher": "ElectricThanhTung",
   "author": {
@@ -102,7 +102,7 @@
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.100.0",
+    "@types/vscode": "^1.80.0",
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.1",
     "@types/node": "20.2.5",
